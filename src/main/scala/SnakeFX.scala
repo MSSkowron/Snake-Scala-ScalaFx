@@ -1,13 +1,10 @@
-import scalafx.application.JFXApp3
-import scalafx.geometry.Insets
+import scalafx.application.{JFXApp3, Platform}
+import scalafx.beans.property.{IntegerProperty, ObjectProperty}
 import scalafx.scene.Scene
-import scalafx.scene.effect.DropShadow
-import scalafx.scene.layout.HBox
 import scalafx.scene.paint.Color._
 import scalafx.scene.paint._
 import scalafx.scene.shape.Rectangle
-import scalafx.scene.text.Text
-
+import scala.concurrent.Future
 import scala.util.Random
 
 object SnakeFX extends JFXApp3 {
@@ -17,6 +14,14 @@ object SnakeFX extends JFXApp3 {
     (225,200),
     (200,200)
   )
+
+  import scala.concurrent.ExecutionContext.Implicits.global
+  def gameLoop( update: () => Unit): Unit = {
+    Future {
+      update()
+      Thread.sleep(1000/25 * 2)
+    }.flatMap(_ => Future(gameLoop(update)))
+  }
 
   case class State(snake: List[(Double,Double)],food: (Double, Double)){
     def newState(dir: Int): State = {
@@ -46,6 +51,23 @@ object SnakeFX extends JFXApp3 {
 
       State(newSnake,newFood)
     }
+
+    def rect(_x: Double, _y: Double, color: Color ): Rectangle = {
+      new Rectangle {
+        x = _x
+        y = _y
+        width = 25
+        height = 25
+        fill = color
+      }
+    }
+
+    def rectangles: List[Rectangle] = {
+      rect(food._1,food._2, Red) :: snake.map {
+        case(x,y) => rect(x, y, Green)
+      }
+    }
+
   }
 
   def randomFood() : (Double,Double) = {
@@ -53,20 +75,36 @@ object SnakeFX extends JFXApp3 {
   }
 
   override def start(): Unit = {
+
+    val state = ObjectProperty(State(initialSnake, randomFood()))
+
+    val frame = IntegerProperty(0)
+    val direction = IntegerProperty(4)
+
+    frame.onChange {
+      state.update(state.value.newState(direction.value))
+    }
+
     stage = new JFXApp3.PrimaryStage{
       width = 600
       height = 600
       scene = new Scene {
         fill = White
-        content = new Rectangle {
-          x = 200
-          y = 200
-          width = 25
-          height = 25
-          fill = Green
+        content = state.value.rectangles
+        onKeyPressed = key => key.getText match {
+          case "w" => direction.value = 1
+          case "s" => direction.value = 2
+          case "a" => direction.value = 3
+          case "d" => direction.value = 4
+        }
+
+        frame.onChange {
+          Platform.runLater { content = state.value.rectangles }
         }
       }
     }
-  }
 
+    gameLoop(() => frame.update(frame.value + 1))
+
+  }
 }
